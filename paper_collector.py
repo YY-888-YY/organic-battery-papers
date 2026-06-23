@@ -4,6 +4,7 @@
 import os
 import json
 import requests
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 import pandas as pd
@@ -77,7 +78,16 @@ def search_semantic_scholar(keyword, limit=10):
     }
     
     try:
+        # 添加延迟避免被限流
+        time.sleep(2)
         response = requests.get(url, params=params, timeout=10)
+        
+        # 如果被限流，等待后重试
+        if response.status_code == 429:
+            print(f"  被限流，等待 5 秒后重试...")
+            time.sleep(5)
+            response = requests.get(url, params=params, timeout=10)
+        
         response.raise_for_status()
         data = response.json()
         
@@ -93,7 +103,7 @@ def search_semantic_scholar(keyword, limit=10):
             }
             papers.append(paper_info)
     except Exception as e:
-        print(f"Error searching Semantic Scholar for '{keyword}': {e}")
+        print(f"  警告：Semantic Scholar 搜索失败 ({e})，继续使用 CrossRef 数据")
     
     return papers
 
@@ -107,6 +117,8 @@ def search_crossref(keyword, limit=10):
     }
     
     try:
+        # 添加延迟
+        time.sleep(1)
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
@@ -133,7 +145,7 @@ def search_crossref(keyword, limit=10):
             }
             papers.append(paper_info)
     except Exception as e:
-        print(f"Error searching CrossRef for '{keyword}': {e}")
+        print(f"  警告：CrossRef 搜索失败 ({e})")
     
     return papers
 
@@ -226,10 +238,13 @@ def main():
     all_papers = []
     for keyword in SEARCH_KEYWORDS:
         print(f"搜索关键词: {keyword}")
+        
+        # 从 Semantic Scholar 搜索
         papers_ss = search_semantic_scholar(keyword, limit=5)
         all_papers.extend(papers_ss)
         print(f"  - Semantic Scholar: {len(papers_ss)} 篇")
         
+        # 从 CrossRef 搜索
         papers_cr = search_crossref(keyword, limit=5)
         all_papers.extend(papers_cr)
         print(f"  - CrossRef: {len(papers_cr)} 篇")
